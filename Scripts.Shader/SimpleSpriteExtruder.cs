@@ -1,4 +1,5 @@
 using UnityEngine;
+using System.Collections.Generic;
 #if UNITY_EDITOR
 using UnityEditor;
 using System.IO;
@@ -10,15 +11,17 @@ public class SimpleSpriteExtruder : MonoBehaviour
     [Header("Voxel Settings")]
     public Texture2D sourceTexture;
     public Material voxelMaterial;
-    public float pixelSize = 0.1f;
-    public float depth = 0.2f;
+    public float pixelSize = 0.05f;
+    public float depth = 0.05f;
 
     [Header("Save Settings")]
-    [Tooltip("Which category to save into? (e.g., Weapons, Buildings)")]
-    public string categoryFolder = "Default";
+    public string categoryFolder = "Weapons";
+    public string fileName = "OptimizedVoxelItem";
 
-    [Tooltip("The name of the file to be saved")]
-    public string fileName = "Default";
+    // Lists to hold mesh data
+    private List<Vector3> vertices = new List<Vector3>();
+    private List<int> triangles = new List<int>();
+    private List<Color> colors = new List<Color>();
 
     public void GeneratePreview()
     {
@@ -28,94 +31,120 @@ public class SimpleSpriteExtruder : MonoBehaviour
             return;
         }
 
+        // Clear the lists
+        vertices.Clear();
+        triangles.Clear();
+        colors.Clear();
+
         int width = sourceTexture.width;
         int height = sourceTexture.height;
-        CombineInstance[] combine = new CombineInstance[width * height];
-        int voxelCount = 0;
         Vector3 offset = new Vector3(width / 2f, height / 2f, 0) * pixelSize;
+
+        float h = pixelSize / 2f; // Half pixel size
+        float d = depth / 2f;     // Half depth
 
         for (int x = 0; x < width; x++)
         {
             for (int y = 0; y < height; y++)
             {
-                Color pixelColor = sourceTexture.GetPixel(x, y);
-
-                if (pixelColor.a > 0.1f)
+                if (IsSolid(x, y))
                 {
-                    GameObject tempCube = GameObject.CreatePrimitive(PrimitiveType.Cube);
-                    tempCube.transform.localScale = new Vector3(pixelSize, pixelSize, depth);
-                    tempCube.transform.position = new Vector3(x * pixelSize, y * pixelSize, 0) - offset;
+                    Color pColor = sourceTexture.GetPixel(x, y);
+                    Vector3 p = new Vector3(x * pixelSize, y * pixelSize, 0) - offset;
 
-                    MeshFilter filter = tempCube.GetComponent<MeshFilter>();
-                    Mesh tempMesh = filter.sharedMesh;
+                    // FRONT FACE (Faces -Z direction)
+                    AddFace(
+                        p + new Vector3(-h, -h, -d), p + new Vector3(-h, h, -d),
+                        p + new Vector3(h, h, -d), p + new Vector3(h, -h, -d), pColor);
 
-                    Color[] vertexColors = new Color[tempMesh.vertices.Length];
-                    for (int i = 0; i < vertexColors.Length; i++)
-                    {
-                        vertexColors[i] = pixelColor;
-                    }
+                    // BACK FACE (Faces +Z direction)
+                    AddFace(
+                        p + new Vector3(h, -h, d), p + new Vector3(h, h, d),
+                        p + new Vector3(-h, h, d), p + new Vector3(-h, -h, d), pColor);
 
-                    Mesh coloredMesh = Instantiate(tempMesh);
-                    coloredMesh.colors = vertexColors;
+                    // TOP FACE (Faces +Y direction) - Only drawn if pixel above is empty
+                    if (!IsSolid(x, y + 1))
+                        AddFace(
+                            p + new Vector3(-h, h, -d), p + new Vector3(-h, h, d),
+                            p + new Vector3(h, h, d), p + new Vector3(h, h, -d), pColor);
 
-                    combine[voxelCount].mesh = coloredMesh;
-                    combine[voxelCount].transform = tempCube.transform.localToWorldMatrix;
-                    voxelCount++;
+                    // BOTTOM FACE (Faces -Y direction) - Only drawn if pixel below is empty
+                    if (!IsSolid(x, y - 1))
+                        AddFace(
+                            p + new Vector3(h, -h, -d), p + new Vector3(h, -h, d),
+                            p + new Vector3(-h, -h, d), p + new Vector3(-h, -h, -d), pColor);
 
-                    DestroyImmediate(tempCube);
+                    // LEFT FACE (Faces -X direction) - Only drawn if pixel to the left is empty
+                    if (!IsSolid(x - 1, y))
+                        AddFace(
+                            p + new Vector3(-h, -h, d), p + new Vector3(-h, h, d),
+                            p + new Vector3(-h, h, -d), p + new Vector3(-h, -h, -d), pColor);
+
+                    // RIGHT FACE (Faces +X direction) - Only drawn if pixel to the right is empty
+                    if (!IsSolid(x + 1, y))
+                        AddFace(
+                            p + new Vector3(h, -h, -d), p + new Vector3(h, h, -d),
+                            p + new Vector3(h, h, d), p + new Vector3(h, -h, d), pColor);
                 }
             }
         }
 
-        CombineInstance[] finalCombine = new CombineInstance[voxelCount];
-        System.Array.Copy(combine, finalCombine, voxelCount);
+        // Create a brand new, clean Mesh with the calculated data
+        Mesh optimizedMesh = new Mesh();
+        optimizedMesh.indexFormat = UnityEngine.Rendering.IndexFormat.UInt32;
+        optimizedMesh.vertices = vertices.ToArray();
+        optimizedMesh.triangles = triangles.ToArray();
+        optimizedMesh.colors = colors.ToArray();
 
-        Mesh newMesh = new Mesh();
-        newMesh.indexFormat = UnityEngine.Rendering.IndexFormat.UInt32;
-        newMesh.CombineMeshes(finalCombine);
+        // Recalculate normals automatically so lighting works correctly
+        optimizedMesh.RecalculateNormals();
 
-        GetComponent<MeshFilter>().mesh = newMesh;
+        GetComponent<MeshFilter>().mesh = optimizedMesh;
+        if (voxelMaterial != null) GetComponent<MeshRenderer>().sharedMaterial = voxelMaterial;
+    }
 
-        if (voxelMaterial != null)
-        {
-            GetComponent<MeshRenderer>().sharedMaterial = voxelMaterial;
-        }
-        else
-        {
-            Debug.LogWarning("Material is not assigned!");
-        }
+    // Helper function to check if there is a solid pixel at a coordinate
+    private bool IsSolid(int x, int y)
+    {
+        if (x < 0 || x >= sourceTexture.width || y < 0 || y >= sourceTexture.height) return false;
+        return sourceTexture.GetPixel(x, y).a > 0.1f;
+    }
+
+    // Helper function to add 4 vertices, 6 triangle points, and colors to the lists
+    private void AddFace(Vector3 v0, Vector3 v1, Vector3 v2, Vector3 v3, Color col)
+    {
+        int vIndex = vertices.Count;
+
+        vertices.Add(v0); vertices.Add(v1); vertices.Add(v2); vertices.Add(v3);
+        colors.Add(col); colors.Add(col); colors.Add(col); colors.Add(col);
+
+        triangles.Add(vIndex); triangles.Add(vIndex + 1); triangles.Add(vIndex + 2);
+        triangles.Add(vIndex); triangles.Add(vIndex + 2); triangles.Add(vIndex + 3);
     }
 
     public void SaveAsPrefab()
     {
 #if UNITY_EDITOR
         MeshFilter mf = GetComponent<MeshFilter>();
-
         if (mf.sharedMesh == null)
         {
             Debug.LogError("There is no model to save! Press the Preview button first.");
             return;
         }
 
-        // Folder creation operations
         string meshFolderAbs = Application.dataPath + "/Models/Meshes/" + categoryFolder;
         string prefabFolderAbs = Application.dataPath + "/Models/Prefabs/" + categoryFolder;
 
         if (!Directory.Exists(meshFolderAbs)) Directory.CreateDirectory(meshFolderAbs);
         if (!Directory.Exists(prefabFolderAbs)) Directory.CreateDirectory(prefabFolderAbs);
-
         AssetDatabase.Refresh();
 
-        // --- UNIQUE FILE NAMING SYSTEM ---
         string uniqueFileName = fileName;
         int counter = 1;
-
         string meshPath = "Assets/Models/Meshes/" + categoryFolder + "/" + uniqueFileName + "_Mesh.asset";
         string prefabPath = "Assets/Models/Prefabs/" + categoryFolder + "/" + uniqueFileName + ".prefab";
 
-        // If a prefab OR mesh with this name already exists, add a number to the end and try again
-        while (AssetDatabase.LoadAssetAtPath<Object>(prefabPath) != null ||
-               AssetDatabase.LoadAssetAtPath<Object>(meshPath) != null)
+        while (AssetDatabase.LoadAssetAtPath<Object>(prefabPath) != null || AssetDatabase.LoadAssetAtPath<Object>(meshPath) != null)
         {
             uniqueFileName = fileName + "_" + counter;
             meshPath = "Assets/Models/Meshes/" + categoryFolder + "/" + uniqueFileName + "_Mesh.asset";
@@ -123,23 +152,19 @@ public class SimpleSpriteExtruder : MonoBehaviour
             counter++;
         }
 
-        // 1. Save Mesh (Now saves with a unique name without overwriting)
         Mesh meshToSave = Instantiate(mf.sharedMesh);
         AssetDatabase.CreateAsset(meshToSave, meshPath);
         AssetDatabase.SaveAssets();
 
-        // 2. Save Prefab
         GameObject prefabSkeleton = new GameObject(uniqueFileName);
         MeshFilter newMF = prefabSkeleton.AddComponent<MeshFilter>();
         MeshRenderer newMR = prefabSkeleton.AddComponent<MeshRenderer>();
-
         newMF.sharedMesh = AssetDatabase.LoadAssetAtPath<Mesh>(meshPath);
         newMR.sharedMaterial = voxelMaterial;
 
         PrefabUtility.SaveAsPrefabAsset(prefabSkeleton, prefabPath);
         DestroyImmediate(prefabSkeleton);
-
-        Debug.Log("Done! The new object was safely saved as '" + uniqueFileName + "'.");
+        Debug.Log("Optimized object safely saved as: " + uniqueFileName);
 #endif
     }
 }
@@ -151,23 +176,14 @@ public class SimpleSpriteExtruderEditor : Editor
     public override void OnInspectorGUI()
     {
         DrawDefaultInspector();
-
         SimpleSpriteExtruder script = (SimpleSpriteExtruder)target;
 
         EditorGUILayout.Space(15);
         EditorGUILayout.LabelField("Voxel Generation Operations", EditorStyles.boldLabel);
 
-        if (GUILayout.Button("1 - Generate / Update Preview", GUILayout.Height(35)))
-        {
-            script.GeneratePreview();
-        }
-
+        if (GUILayout.Button("1 - Generate Optimized Preview", GUILayout.Height(35))) script.GeneratePreview();
         EditorGUILayout.Space(5);
-
-        if (GUILayout.Button("2 - Save Ready Model to Folders", GUILayout.Height(35)))
-        {
-            script.SaveAsPrefab();
-        }
+        if (GUILayout.Button("2 - Save Ready Model to Folders", GUILayout.Height(35))) script.SaveAsPrefab();
     }
 }
 #endif
