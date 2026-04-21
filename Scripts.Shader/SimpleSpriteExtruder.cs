@@ -14,6 +14,9 @@ public class SimpleSpriteExtruder : MonoBehaviour
     public float pixelSize = 0.05f;
     public float depth = 0.05f;
 
+    [Header("Resolution")]
+    public int downscaleFactor = 1; // 1=full res, 2=half res, 4=quarter res, etc.
+
     [Header("Save Settings")]
     public string categoryFolder = "Weapons";
     public string fileName = "OptimizedVoxelItem";
@@ -31,13 +34,16 @@ public class SimpleSpriteExtruder : MonoBehaviour
             return;
         }
 
+        // Scale texture if downscaleFactor > 1
+        Texture2D workingTexture = ScaleTexture(sourceTexture, downscaleFactor);
+
         // Clear the lists
         vertices.Clear();
         triangles.Clear();
         colors.Clear();
 
-        int width = sourceTexture.width;
-        int height = sourceTexture.height;
+        int width = workingTexture.width;
+        int height = workingTexture.height;
         Vector3 offset = new Vector3(width / 2f, height / 2f, 0) * pixelSize;
 
         float h = pixelSize / 2f; // Half pixel size
@@ -47,9 +53,9 @@ public class SimpleSpriteExtruder : MonoBehaviour
         {
             for (int y = 0; y < height; y++)
             {
-                if (IsSolid(x, y))
+                if (IsSolid(x, y, workingTexture))
                 {
-                    Color pColor = sourceTexture.GetPixel(x, y);
+                    Color pColor = workingTexture.GetPixel(x, y);
                     Vector3 p = new Vector3(x * pixelSize, y * pixelSize, 0) - offset;
 
                     // FRONT FACE (Faces -Z direction)
@@ -63,25 +69,25 @@ public class SimpleSpriteExtruder : MonoBehaviour
                         p + new Vector3(-h, h, d), p + new Vector3(-h, -h, d), pColor);
 
                     // TOP FACE (Faces +Y direction) - Only drawn if pixel above is empty
-                    if (!IsSolid(x, y + 1))
+                    if (!IsSolid(x, y + 1, workingTexture))
                         AddFace(
                             p + new Vector3(-h, h, -d), p + new Vector3(-h, h, d),
                             p + new Vector3(h, h, d), p + new Vector3(h, h, -d), pColor);
 
                     // BOTTOM FACE (Faces -Y direction) - Only drawn if pixel below is empty
-                    if (!IsSolid(x, y - 1))
+                    if (!IsSolid(x, y - 1, workingTexture))
                         AddFace(
                             p + new Vector3(h, -h, -d), p + new Vector3(h, -h, d),
                             p + new Vector3(-h, -h, d), p + new Vector3(-h, -h, -d), pColor);
 
                     // LEFT FACE (Faces -X direction) - Only drawn if pixel to the left is empty
-                    if (!IsSolid(x - 1, y))
+                    if (!IsSolid(x - 1, y, workingTexture))
                         AddFace(
                             p + new Vector3(-h, -h, d), p + new Vector3(-h, h, d),
                             p + new Vector3(-h, h, -d), p + new Vector3(-h, -h, -d), pColor);
 
                     // RIGHT FACE (Faces +X direction) - Only drawn if pixel to the right is empty
-                    if (!IsSolid(x + 1, y))
+                    if (!IsSolid(x + 1, y, workingTexture))
                         AddFace(
                             p + new Vector3(h, -h, -d), p + new Vector3(h, h, -d),
                             p + new Vector3(h, h, d), p + new Vector3(h, -h, d), pColor);
@@ -104,10 +110,10 @@ public class SimpleSpriteExtruder : MonoBehaviour
     }
 
     // Helper function to check if there is a solid pixel at a coordinate
-    private bool IsSolid(int x, int y)
+    private bool IsSolid(int x, int y, Texture2D texture)
     {
-        if (x < 0 || x >= sourceTexture.width || y < 0 || y >= sourceTexture.height) return false;
-        return sourceTexture.GetPixel(x, y).a > 0.1f;
+        if (x < 0 || x >= texture.width || y < 0 || y >= texture.height) return false;
+        return texture.GetPixel(x, y).a > 0.1f;
     }
 
     // Helper function to add 4 vertices, 6 triangle points, and colors to the lists
@@ -120,6 +126,27 @@ public class SimpleSpriteExtruder : MonoBehaviour
 
         triangles.Add(vIndex); triangles.Add(vIndex + 1); triangles.Add(vIndex + 2);
         triangles.Add(vIndex); triangles.Add(vIndex + 2); triangles.Add(vIndex + 3);
+    }
+
+    // Helper function to scale texture down by a factor
+    private Texture2D ScaleTexture(Texture2D source, int scaleFactor)
+    {
+        if (scaleFactor <= 1) return source;
+
+        int newWidth = source.width / scaleFactor;
+        int newHeight = source.height / scaleFactor;
+        Texture2D scaled = new Texture2D(newWidth, newHeight, TextureFormat.RGBA32, false);
+
+        for (int y = 0; y < newHeight; y++)
+        {
+            for (int x = 0; x < newWidth; x++)
+            {
+                Color c = source.GetPixel(x * scaleFactor, y * scaleFactor);
+                scaled.SetPixel(x, y, c);
+            }
+        }
+        scaled.Apply();
+        return scaled;
     }
 
     public void SaveAsPrefab()
