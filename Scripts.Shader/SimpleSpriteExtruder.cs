@@ -18,8 +18,8 @@ public class SimpleSpriteExtruder : MonoBehaviour
     public int downscaleFactor = 1; // 1=full res, 2=half res, 4=quarter res, etc.
 
     [Header("Save Settings")]
-    public string categoryFolder = "Weapons";
-    public string fileName = "OptimizedVoxelItem";
+    public string categoryFolder = "testFolder";
+    public string fileName = "item";
 
     // Lists to hold mesh data
     private List<Vector3> vertices = new List<Vector3>();
