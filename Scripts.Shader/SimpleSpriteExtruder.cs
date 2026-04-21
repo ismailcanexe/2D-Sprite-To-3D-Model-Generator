@@ -17,6 +17,10 @@ public class SimpleSpriteExtruder : MonoBehaviour
     [Header("Resolution")]
     public int downscaleFactor = 1; // 1=full res, 2=half res, 4=quarter res, etc.
 
+    [Header("Optimization")]
+    public bool useGreedyMeshing = true;
+    public float colorMatchTolerance = 0.01f; // How similar colors need to be to merge
+
     [Header("Save Settings")]
     public string categoryFolder = "testFolder";
     public string fileName = "item";
@@ -25,6 +29,7 @@ public class SimpleSpriteExtruder : MonoBehaviour
     private List<Vector3> vertices = new List<Vector3>();
     private List<int> triangles = new List<int>();
     private List<Color> colors = new List<Color>();
+    private List<Vector2> uvs = new List<Vector2>();
 
     public void GeneratePreview()
     {
@@ -37,17 +42,30 @@ public class SimpleSpriteExtruder : MonoBehaviour
         // Scale texture if downscaleFactor > 1
         Texture2D workingTexture = ScaleTexture(sourceTexture, downscaleFactor);
 
+        if (useGreedyMeshing)
+        {
+            GenerateGreedyMesh(workingTexture);
+        }
+        else
+        {
+            GenerateStandardMesh(workingTexture);
+        }
+    }
+
+    private void GenerateStandardMesh(Texture2D workingTexture)
+    {
         // Clear the lists
         vertices.Clear();
         triangles.Clear();
         colors.Clear();
+        uvs.Clear();
 
         int width = workingTexture.width;
         int height = workingTexture.height;
         Vector3 offset = new Vector3(width / 2f, height / 2f, 0) * pixelSize;
 
-        float h = pixelSize / 2f; // Half pixel size
-        float d = depth / 2f;     // Half depth
+        float h = pixelSize / 2f;
+        float d = depth / 2f;
 
         for (int x = 0; x < width; x++)
         {
@@ -58,54 +76,251 @@ public class SimpleSpriteExtruder : MonoBehaviour
                     Color pColor = workingTexture.GetPixel(x, y);
                     Vector3 p = new Vector3(x * pixelSize, y * pixelSize, 0) - offset;
 
-                    // FRONT FACE (Faces -Z direction)
-                    AddFace(
-                        p + new Vector3(-h, -h, -d), p + new Vector3(-h, h, -d),
-                        p + new Vector3(h, h, -d), p + new Vector3(h, -h, -d), pColor);
-
-                    // BACK FACE (Faces +Z direction)
-                    AddFace(
-                        p + new Vector3(h, -h, d), p + new Vector3(h, h, d),
-                        p + new Vector3(-h, h, d), p + new Vector3(-h, -h, d), pColor);
-
-                    // TOP FACE (Faces +Y direction) - Only drawn if pixel above is empty
-                    if (!IsSolid(x, y + 1, workingTexture))
-                        AddFace(
-                            p + new Vector3(-h, h, -d), p + new Vector3(-h, h, d),
-                            p + new Vector3(h, h, d), p + new Vector3(h, h, -d), pColor);
-
-                    // BOTTOM FACE (Faces -Y direction) - Only drawn if pixel below is empty
                     if (!IsSolid(x, y - 1, workingTexture))
-                        AddFace(
-                            p + new Vector3(h, -h, -d), p + new Vector3(h, -h, d),
-                            p + new Vector3(-h, -h, d), p + new Vector3(-h, -h, -d), pColor);
+                        AddFace(p + new Vector3(h, -h, -d), p + new Vector3(h, -h, d),
+                                p + new Vector3(-h, -h, d), p + new Vector3(-h, -h, -d), pColor);
 
-                    // LEFT FACE (Faces -X direction) - Only drawn if pixel to the left is empty
+                    if (!IsSolid(x, y + 1, workingTexture))
+                        AddFace(p + new Vector3(-h, h, -d), p + new Vector3(-h, h, d),
+                                p + new Vector3(h, h, d), p + new Vector3(h, h, -d), pColor);
+
                     if (!IsSolid(x - 1, y, workingTexture))
-                        AddFace(
-                            p + new Vector3(-h, -h, d), p + new Vector3(-h, h, d),
-                            p + new Vector3(-h, h, -d), p + new Vector3(-h, -h, -d), pColor);
+                        AddFace(p + new Vector3(-h, -h, d), p + new Vector3(-h, h, d),
+                                p + new Vector3(-h, h, -d), p + new Vector3(-h, -h, -d), pColor);
 
-                    // RIGHT FACE (Faces +X direction) - Only drawn if pixel to the right is empty
                     if (!IsSolid(x + 1, y, workingTexture))
-                        AddFace(
-                            p + new Vector3(h, -h, -d), p + new Vector3(h, h, -d),
-                            p + new Vector3(h, h, d), p + new Vector3(h, -h, d), pColor);
+                        AddFace(p + new Vector3(h, -h, -d), p + new Vector3(h, h, -d),
+                                p + new Vector3(h, h, d), p + new Vector3(h, -h, d), pColor);
+
+                    AddFace(p + new Vector3(-h, -h, -d), p + new Vector3(-h, h, -d),
+                            p + new Vector3(h, h, -d), p + new Vector3(h, -h, -d), pColor);
+
+                    AddFace(p + new Vector3(h, -h, d), p + new Vector3(h, h, d),
+                            p + new Vector3(-h, h, d), p + new Vector3(-h, -h, d), pColor);
                 }
             }
         }
 
-        // Create a brand new, clean Mesh with the calculated data
-        Mesh optimizedMesh = new Mesh();
-        optimizedMesh.indexFormat = UnityEngine.Rendering.IndexFormat.UInt32;
-        optimizedMesh.vertices = vertices.ToArray();
-        optimizedMesh.triangles = triangles.ToArray();
-        optimizedMesh.colors = colors.ToArray();
+        CreateMesh();
+    }
 
-        // Recalculate normals automatically so lighting works correctly
-        optimizedMesh.RecalculateNormals();
+    private void GenerateGreedyMesh(Texture2D workingTexture)
+    {
+        vertices.Clear();
+        triangles.Clear();
+        colors.Clear();
+        uvs.Clear();
 
-        GetComponent<MeshFilter>().mesh = optimizedMesh;
+        int width = workingTexture.width;
+        int height = workingTexture.height;
+        Vector3 offset = new Vector3(width / 2f, height / 2f, 0) * pixelSize;
+
+        float h = pixelSize / 2f;
+        float d = depth / 2f;
+
+        // Per-direction processed arrays - CRITICAL FIX
+        bool[,] processed0 = new bool[width, height]; // bottom
+        bool[,] processed1 = new bool[width, height]; // top
+        bool[,] processed2 = new bool[width, height]; // left
+        bool[,] processed3 = new bool[width, height]; // right
+        bool[,] processed4 = new bool[width, height]; // front
+        bool[,] processed5 = new bool[width, height]; // back
+
+        // Process all 6 face directions
+        for (int direction = 0; direction < 6; direction++)
+        {
+            bool[,] processed = direction switch
+            {
+                0 => processed0,
+                1 => processed1,
+                2 => processed2,
+                3 => processed3,
+                4 => processed4,
+                5 => processed5,
+                _ => processed0
+            };
+
+            for (int y = 0; y < height; y++)
+            {
+                for (int x = 0; x < width; x++)
+                {
+                    if (processed[x, y] || !IsSolid(x, y, workingTexture))
+                        continue;
+
+                    // Skip if this direction's face is not visible
+                    if (!ShouldGenerateFace(x, y, direction, workingTexture))
+                        continue;
+
+                    Color faceColor = workingTexture.GetPixel(x, y);
+
+                    // Greedy merge: expand horizontally
+                    int xSpan = 1;
+                    while (x + xSpan < width && 
+                           !processed[x + xSpan, y] &&
+                           IsSolid(x + xSpan, y, workingTexture) &&
+                           ShouldGenerateFace(x + xSpan, y, direction, workingTexture) &&
+                           ColorsMatch(workingTexture.GetPixel(x + xSpan, y), faceColor))
+                        xSpan++;
+
+                    // Greedy merge: expand vertically
+                    int ySpan = 1;
+                    while (y + ySpan < height)
+                    {
+                        bool canExpand = true;
+                        for (int xx = x; xx < x + xSpan; xx++)
+                        {
+                            if (processed[xx, y + ySpan] ||
+                                !IsSolid(xx, y + ySpan, workingTexture) ||
+                                !ShouldGenerateFace(xx, y + ySpan, direction, workingTexture) ||
+                                !ColorsMatch(workingTexture.GetPixel(xx, y + ySpan), faceColor))
+                            {
+                                canExpand = false;
+                                break;
+                            }
+                        }
+                        if (canExpand) ySpan++;
+                        else break;
+                    }
+
+                    // Generate face for this merged region
+                    Vector3 p0 = new Vector3(x * pixelSize, y * pixelSize, 0) - offset;
+                    Vector3 p1 = new Vector3((x + xSpan) * pixelSize, (y + ySpan) * pixelSize, 0) - offset;
+
+                    GenerateFaceForDirection(direction, p0, p1, d, faceColor, x, y, xSpan, ySpan, width, height);
+
+                    // Mark region as processed (ONLY for this direction)
+                    for (int xx = x; xx < x + xSpan; xx++)
+                        for (int yy = y; yy < y + ySpan; yy++)
+                            processed[xx, yy] = true;
+                }
+            }
+        }
+
+        CreateMesh();
+    }
+
+    private bool ShouldGenerateFace(int x, int y, int direction, Texture2D texture)
+    {
+        // Direction: 0=bottom(y-1), 1=top(y+1), 2=left(x-1), 3=right(x+1), 4=front(z-1), 5=back(z+1)
+        return direction switch
+        {
+            0 => !IsSolid(x, y - 1, texture),        // Bottom: no solid below
+            1 => !IsSolid(x, y + 1, texture),        // Top: no solid above
+            2 => !IsSolid(x - 1, y, texture),        // Left: no solid to left
+            3 => !IsSolid(x + 1, y, texture),        // Right: no solid to right
+            4 => true,                                  // Front: always generate
+            5 => true,                                  // Back: always generate
+            _ => false
+        };
+    }
+
+    private void GenerateFaceForDirection(int direction, Vector3 p0, Vector3 p1, float d, Color col, int startX, int startY, int xSpan, int ySpan, int texWidth, int texHeight)
+    {
+        // UVs anchored to absolute sprite position to prevent sliding at larger scales
+        float uvX0 = (float)startX / texWidth;
+        float uvX1 = (float)(startX + xSpan) / texWidth;
+        float uvY0 = (float)startY / texHeight;
+        float uvY1 = (float)(startY + ySpan) / texHeight;
+
+        // p0 = min corner, p1 = max corner
+        switch (direction)
+        {
+            case 0: // BOTTOM (y - 1)
+                AddFace(
+                    new Vector3(p1.x, p0.y, -d),
+                    new Vector3(p1.x, p0.y, d),
+                    new Vector3(p0.x, p0.y, d),
+                    new Vector3(p0.x, p0.y, -d),
+                    col,
+                    new Vector2(uvX1, uvY0),
+                    new Vector2(uvX1, uvY0),
+                    new Vector2(uvX0, uvY0),
+                    new Vector2(uvX0, uvY0));
+                break;
+
+            case 1: // TOP (y + 1)
+                AddFace(
+                    new Vector3(p0.x, p1.y, -d),
+                    new Vector3(p0.x, p1.y, d),
+                    new Vector3(p1.x, p1.y, d),
+                    new Vector3(p1.x, p1.y, -d),
+                    col,
+                    new Vector2(uvX0, uvY1),
+                    new Vector2(uvX0, uvY1),
+                    new Vector2(uvX1, uvY1),
+                    new Vector2(uvX1, uvY1));
+                break;
+
+            case 2: // LEFT (x - 1)
+                AddFace(
+                    new Vector3(p0.x, p0.y, d),
+                    new Vector3(p0.x, p1.y, d),
+                    new Vector3(p0.x, p1.y, -d),
+                    new Vector3(p0.x, p0.y, -d),
+                    col,
+                    new Vector2(uvX0, uvY0),
+                    new Vector2(uvX0, uvY1),
+                    new Vector2(uvX0, uvY1),
+                    new Vector2(uvX0, uvY0));
+                break;
+
+            case 3: // RIGHT (x + 1)
+                AddFace(
+                    new Vector3(p1.x, p0.y, -d),
+                    new Vector3(p1.x, p1.y, -d),
+                    new Vector3(p1.x, p1.y, d),
+                    new Vector3(p1.x, p0.y, d),
+                    col,
+                    new Vector2(uvX1, uvY0),
+                    new Vector2(uvX1, uvY1),
+                    new Vector2(uvX1, uvY1),
+                    new Vector2(uvX1, uvY0));
+                break;
+
+            case 4: // FRONT (z - 1)
+                AddFace(
+                    new Vector3(p0.x, p0.y, -d),
+                    new Vector3(p0.x, p1.y, -d),
+                    new Vector3(p1.x, p1.y, -d),
+                    new Vector3(p1.x, p0.y, -d),
+                    col,
+                    new Vector2(uvX0, uvY0),
+                    new Vector2(uvX0, uvY1),
+                    new Vector2(uvX1, uvY1),
+                    new Vector2(uvX1, uvY0));
+                break;
+
+            case 5: // BACK (z + 1)
+                AddFace(
+                    new Vector3(p1.x, p0.y, d),
+                    new Vector3(p1.x, p1.y, d),
+                    new Vector3(p0.x, p1.y, d),
+                    new Vector3(p0.x, p0.y, d),
+                    col,
+                    new Vector2(uvX1, uvY0),
+                    new Vector2(uvX1, uvY1),
+                    new Vector2(uvX0, uvY1),
+                    new Vector2(uvX0, uvY0));
+                break;
+        }
+    }
+
+    private bool ColorsMatch(Color a, Color b)
+    {
+        return Vector4.Distance(a, b) < colorMatchTolerance;
+    }
+
+    private void CreateMesh()
+    {
+        Mesh mesh = new Mesh();
+        mesh.indexFormat = UnityEngine.Rendering.IndexFormat.UInt32;
+        mesh.vertices = vertices.ToArray();
+        mesh.triangles = triangles.ToArray();
+        mesh.colors = colors.ToArray();
+        mesh.uv = uvs.ToArray();
+        mesh.RecalculateNormals();
+
+        GetComponent<MeshFilter>().mesh = mesh;
         if (voxelMaterial != null) GetComponent<MeshRenderer>().sharedMaterial = voxelMaterial;
     }
 
@@ -116,16 +331,23 @@ public class SimpleSpriteExtruder : MonoBehaviour
         return texture.GetPixel(x, y).a > 0.1f;
     }
 
-    // Helper function to add 4 vertices, 6 triangle points, and colors to the lists
-    private void AddFace(Vector3 v0, Vector3 v1, Vector3 v2, Vector3 v3, Color col)
+    // Helper function to add 4 vertices, 6 triangle points, colors, and UVs to the lists
+    private void AddFace(Vector3 v0, Vector3 v1, Vector3 v2, Vector3 v3, Color col, Vector2 uv0, Vector2 uv1, Vector2 uv2, Vector2 uv3)
     {
         int vIndex = vertices.Count;
 
         vertices.Add(v0); vertices.Add(v1); vertices.Add(v2); vertices.Add(v3);
         colors.Add(col); colors.Add(col); colors.Add(col); colors.Add(col);
+        uvs.Add(uv0); uvs.Add(uv1); uvs.Add(uv2); uvs.Add(uv3);
 
         triangles.Add(vIndex); triangles.Add(vIndex + 1); triangles.Add(vIndex + 2);
         triangles.Add(vIndex); triangles.Add(vIndex + 2); triangles.Add(vIndex + 3);
+    }
+
+    // Overload for backward compatibility (solid color, no texture)
+    private void AddFace(Vector3 v0, Vector3 v1, Vector3 v2, Vector3 v3, Color col)
+    {
+        AddFace(v0, v1, v2, v3, col, Vector2.zero, Vector2.one, Vector2.one, Vector2.zero);
     }
 
     // Helper function to scale texture down by a factor
@@ -214,3 +436,7 @@ public class SimpleSpriteExtruderEditor : Editor
     }
 }
 #endif
+
+
+
+
