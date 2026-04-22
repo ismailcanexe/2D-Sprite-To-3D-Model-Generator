@@ -7,33 +7,10 @@ using UnityEditor.U2D.Sprites; // Sprite Data Provider (Otomatik dilimleme) içi
 public class SpriteExtractorEditor
 {
     // ===================================================================================
-    // 1. ÖZELLİK: ZATEN DİLİMLENMİŞ SPRİTELARI AYRI PNG OLARAK ÇIKARTMA
+    // 1. ÖZELLİK: DÜZ TEXTURE DOSYALARINI SPRITE'A ÇEVİRME (NO FILTER & READ/WRITE)
     // ===================================================================================
-    [MenuItem("Assets/Sprite İşlemleri/1- Dilimlenmiş Spriteleri Çıkart (PNG)")]
-    public static void ExtractSpritesMenu()
-    {
-        Texture2D selectedTexture = Selection.activeObject as Texture2D;
 
-        if (selectedTexture == null)
-        {
-            Debug.LogWarning("Lütfen önce dilimlenmiş bir Sprite (Multiple) dosyası seçin.");
-            return;
-        }
-
-        ExtractSpritesFromTexture(selectedTexture);
-    }
-
-    [MenuItem("Assets/Sprite İşlemleri/1- Dilimlenmiş Spriteleri Çıkart (PNG)", true)]
-    private static bool ExtractSpritesValidation()
-    {
-        return Selection.activeObject is Texture2D;
-    }
-
-
-    // ===================================================================================
-    // 2. ÖZELLİK: DÜZ TEXTURE DOSYALARINI SPRITE'A ÇEVİRME (NO FILTER & READ/WRITE)
-    // ===================================================================================
-    [MenuItem("Assets/Sprite İşlemleri/2- Seçili Resimleri Sprite'a Çevir (Single)")]
+    [MenuItem("Assets/Sprite İşlemleri/1- Seçili Resimleri Sprite'a Çevir (Make Setting For Sprites)")]
     public static void ConvertToSprite()
     {
         Object[] selectedObjects = Selection.GetFiltered(typeof(Texture2D), SelectionMode.Assets);
@@ -61,11 +38,35 @@ public class SpriteExtractorEditor
         Debug.Log("İşlem Tamam! " + count + " adet dosya başarıyla Sprite formatına dönüştürüldü.");
     }
 
-    [MenuItem("Assets/Sprite İşlemleri/2- Seçili Resimleri Sprite'a Çevir (Single)", true)]
+    [MenuItem("Assets/Sprite İşlemleri/1- Seçili Resimleri Sprite'a Çevir (Make Setting For Sprites)", true)]
     private static bool ConvertToSpriteValidation()
     {
         return Selection.GetFiltered(typeof(Texture2D), SelectionMode.Assets).Length > 0;
     }
+    // ===================================================================================
+    // 2. ÖZELLİK: ZATEN DİLİMLENMİŞ SPRİTELARI AYRI PNG OLARAK ÇIKARTMA
+    // ===================================================================================
+    [MenuItem("Assets/Sprite İşlemleri/2- Dilimlenmiş Spriteleri Çıkart (Extract Multiple Sprites)")]
+    public static void ExtractSpritesMenu()
+    {
+        Texture2D selectedTexture = Selection.activeObject as Texture2D;
+
+        if (selectedTexture == null)
+        {
+            Debug.LogWarning("Lütfen önce dilimlenmiş bir Sprite (Multiple) dosyası seçin.");
+            return;
+        }
+
+        ExtractSpritesFromTexture(selectedTexture);
+    }
+
+    [MenuItem("Assets/Sprite İşlemleri/2- Dilimlenmiş Spriteleri Çıkart (Extract Multiple Sprites)", true)]
+    private static bool ExtractSpritesValidation()
+    {
+        return Selection.activeObject is Texture2D;
+    }
+
+
 
 
     // ===================================================================================
@@ -132,7 +133,7 @@ public class SpriteExtractorEditor
 
 
     // ===================================================================================
-    // YARDIMCI FONKSİYON: Dışarı Çıkartma Mantığı (1 ve 3 numaralı özellikler kullanıyor)
+    // YARDIMCI FONKSİYON: Dışarı Çıkartma Mantığı (2 ve 3 numaralı özellikler kullanıyor)
     // ===================================================================================
     private static void ExtractSpritesFromTexture(Texture2D selectedTexture)
     {
