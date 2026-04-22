@@ -22,3 +22,5 @@ has downscale
 
 <br>
 <img width="995" height="687" alt="image" src="https://github.com/user-attachments/assets/24576c02-ff57-4737-be2e-e3f55c008e99" />
+<br>
+<img width="819" height="79" alt="image" src="https://github.com/user-attachments/assets/fd64260c-7673-4801-b1d3-dabf04e6fad0" />
