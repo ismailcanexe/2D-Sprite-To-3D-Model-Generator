@@ -1,0 +1,50 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!28 &2800000
+Texture2D:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_Name: VoxelItem_4_Tex
+  m_ImageContentsHash:
+    serializedVersion: 2
+    Hash: 00000000000000000000000000000000
+  m_ForcedFallbackFormat: 4
+  m_DownscaleFallback: 0
+  m_IsAlphaChannelOptional: 0
+  serializedVersion: 2
+  m_Width: 11
+  m_Height: 10
+  m_CompleteImageSize: 440
+  m_MipsStripped: 0
+  m_TextureFormat: 4
+  m_MipCount: 1
+  m_IsReadable: 1
+  m_IsPreProcessed: 0
+  m_IgnoreMipmapLimit: 0
+  m_MipmapLimitGroupName: 
+  m_StreamingMipmaps: 0
+  m_StreamingMipmapsPriority: 0
+  m_VTOnly: 0
+  m_AlphaIsTransparency: 0
+  m_ImageCount: 1
+  m_TextureDimension: 2
+  m_TextureSettings:
+    serializedVersion: 2
+    m_FilterMode: 0
+    m_Aniso: 0
+    m_MipBias: 0
+    m_WrapU: 1
+    m_WrapV: 1
+    m_WrapW: 1
+  m_LightmapFormat: 0
+  m_ColorSpace: 1
+  m_PlatformBlob: 
+  image data: 440
+  _typelessdata: 0000000000000000ffffff00ffffff00c6cbd61ec6cbde1cc6c7ce1cc6c3ce1563616b00adacba0000000000000000001e202b001e202b00000829ff05092eff8cb6c6ff9ce3f7ff9cd3e7ff0d2441ff181c2600181c26004a454a0042414a00080831ff18387bff7b92b5ff08206bff08388cff10498cff2971bdff94dbeffffffbff00c6c7d600000421ff0d2568ff082063ff082463ff022c91ff00308cff234796ff18458cff315da5ff293c52ff73758400001439ff002063ff73a2c6ff08459cff479ee1ff63c7efff5ac3efff214d94ff428cd0ff235696ff080821be1e4094ff427dbdff0845adff4abae7ff2b5bc3ff52a8f1ff6bcbefff47a3d6ff081c73ff214d94ff080c20c0001c4aff428aceff2182ceff84c7f7ff3165c6ff3c9fdeff215dadff1865bdff84e3ffff52759cffefeff7005aa6d6ff2b81d0ff105dadff10419cff2b63b8ff184d9cff2655a5ff0a3094ff102073ff1b3d8effefefff00b5e7f7ff0a30a2ff429aceff003494ff0845a5ff2671c3ff164ba7ff08246bff08185aff31516bffffffff00ffffff005a8aa5ff419bd6ff0051a5ff3394e9ff4aaae7ff0d5ed3ff0845adff08244afff7fbff00
+  m_StreamData:
+    serializedVersion: 2
+    offset: 0
+    size: 0
+    path: 

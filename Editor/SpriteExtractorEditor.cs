@@ -28,7 +28,10 @@ public class SpriteExtractorEditor
                 importer.textureType = TextureImporterType.Sprite;
                 importer.spriteImportMode = SpriteImportMode.Single;
                 importer.filterMode = FilterMode.Point;
-                importer.isReadable = true;
+        importer.mipmapEnabled = false;
+        importer.textureCompression = TextureImporterCompression.Uncompressed;
+        importer.anisoLevel = 0;
+        importer.isReadable = true;
 
                 AssetDatabase.ImportAsset(path, ImportAssetOptions.ForceUpdate);
                 count++;
@@ -87,6 +90,9 @@ public class SpriteExtractorEditor
         importer.textureType = TextureImporterType.Sprite;
         importer.spriteImportMode = SpriteImportMode.Multiple;
         importer.filterMode = FilterMode.Point;
+        importer.mipmapEnabled = false;
+        importer.textureCompression = TextureImporterCompression.Uncompressed;
+        importer.anisoLevel = 0;
         importer.isReadable = true;
 
         // Asset'i güncelle
@@ -185,7 +191,10 @@ public class SpriteExtractorEditor
                 importer.textureType = TextureImporterType.Sprite;
                 importer.spriteImportMode = SpriteImportMode.Single;
                 importer.filterMode = FilterMode.Point;
-                importer.isReadable = true;
+        importer.mipmapEnabled = false;
+        importer.textureCompression = TextureImporterCompression.Uncompressed;
+        importer.anisoLevel = 0;
+        importer.isReadable = true;
 
                 AssetDatabase.ImportAsset(filePath, ImportAssetOptions.ForceUpdate);
             }
@@ -194,3 +203,6 @@ public class SpriteExtractorEditor
         Debug.Log("İşlem Tamam! Toplam " + count + " adet alt sprite çıkartıldı ve ayarları (No Filter vb.) uygulandı.");
     }
 }
+
+
+
