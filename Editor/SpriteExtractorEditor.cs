@@ -1,14 +1,17 @@
 using UnityEngine;
 using UnityEditor;
 using System.IO;
+using System.Collections.Generic;
+using UnityEditor.U2D.Sprites; // Sprite Data Provider (Otomatik dilimleme) için gerekli
 
 public class SpriteExtractorEditor
 {
-    // Unity'de dosyalara sağ tıkladığımızda çıkacak menü seçeneği
-    [MenuItem("Assets/Dilimlenmiş Spriteleri Çıkart (PNG)")]
-    public static void ExtractSprites()
+    // ===================================================================================
+    // 1. ÖZELLİK: ZATEN DİLİMLENMİŞ SPRİTELARI AYRI PNG OLARAK ÇIKARTMA
+    // ===================================================================================
+    [MenuItem("Assets/Sprite İşlemleri/1- Dilimlenmiş Spriteleri Çıkart (PNG)")]
+    public static void ExtractSpritesMenu()
     {
-        // Seçili olan dosyayı al
         Texture2D selectedTexture = Selection.activeObject as Texture2D;
 
         if (selectedTexture == null)
@@ -17,19 +20,138 @@ public class SpriteExtractorEditor
             return;
         }
 
-        // Texture'ın dosya yolunu bul ve altındaki tüm dilimlenmiş spriteleri çek
+        ExtractSpritesFromTexture(selectedTexture);
+    }
+
+    [MenuItem("Assets/Sprite İşlemleri/1- Dilimlenmiş Spriteleri Çıkart (PNG)", true)]
+    private static bool ExtractSpritesValidation()
+    {
+        return Selection.activeObject is Texture2D;
+    }
+
+
+    // ===================================================================================
+    // 2. ÖZELLİK: DÜZ TEXTURE DOSYALARINI SPRITE'A ÇEVİRME (NO FILTER & READ/WRITE)
+    // ===================================================================================
+    [MenuItem("Assets/Sprite İşlemleri/2- Seçili Resimleri Sprite'a Çevir (Single)")]
+    public static void ConvertToSprite()
+    {
+        Object[] selectedObjects = Selection.GetFiltered(typeof(Texture2D), SelectionMode.Assets);
+
+        if (selectedObjects.Length == 0) return;
+
+        int count = 0;
+        foreach (Object obj in selectedObjects)
+        {
+            string path = AssetDatabase.GetAssetPath(obj);
+            TextureImporter importer = AssetImporter.GetAtPath(path) as TextureImporter;
+
+            if (importer != null)
+            {
+                importer.textureType = TextureImporterType.Sprite;
+                importer.spriteImportMode = SpriteImportMode.Single;
+                importer.filterMode = FilterMode.Point;
+                importer.isReadable = true;
+
+                AssetDatabase.ImportAsset(path, ImportAssetOptions.ForceUpdate);
+                count++;
+            }
+        }
+
+        Debug.Log("İşlem Tamam! " + count + " adet dosya başarıyla Sprite formatına dönüştürüldü.");
+    }
+
+    [MenuItem("Assets/Sprite İşlemleri/2- Seçili Resimleri Sprite'a Çevir (Single)", true)]
+    private static bool ConvertToSpriteValidation()
+    {
+        return Selection.GetFiltered(typeof(Texture2D), SelectionMode.Assets).Length > 0;
+    }
+
+
+    // ===================================================================================
+    // 3. ÖZELLİK: TEK TIKLA OTOMATİK DİLİMLE VE PARÇALARI ÇIKART (YENİ)
+    // ===================================================================================
+    [MenuItem("Assets/Sprite İşlemleri/3- Otomatik Dilimle ve Ayır (Auto-Slice & Extract)")]
+    public static void AutoSliceAndExtract()
+    {
+        Texture2D selectedTexture = Selection.activeObject as Texture2D;
+        if (selectedTexture == null) return;
+
+        string path = AssetDatabase.GetAssetPath(selectedTexture);
+        TextureImporter importer = AssetImporter.GetAtPath(path) as TextureImporter;
+
+        if (importer == null) return;
+
+        // 1. Resmi Sprite (Multiple) yap, Point Filter ve Read/Write aç
+        importer.textureType = TextureImporterType.Sprite;
+        importer.spriteImportMode = SpriteImportMode.Multiple;
+        importer.filterMode = FilterMode.Point;
+        importer.isReadable = true;
+
+        // Asset'i güncelle
+        AssetDatabase.ImportAsset(path, ImportAssetOptions.ForceUpdate);
+
+        // 2. Unity'nin Sprite Editor'deki otomatik dilimleme algoritmasını çalıştır
+        Texture2D tex = AssetDatabase.LoadAssetAtPath<Texture2D>(path);
+        Rect[] rects = UnityEditorInternal.InternalSpriteUtility.GenerateAutomaticSpriteRectangles(tex, 4, 0);
+
+        // 3. Bulunan dilimleri Sprite Editor meta verisine (Data Provider) yaz
+        var factory = new SpriteDataProviderFactories();
+        factory.Init();
+        var dataProvider = factory.GetSpriteEditorDataProviderFromObject(tex);
+        dataProvider.InitSpriteEditorDataProvider();
+
+        var spriteRects = new List<SpriteRect>();
+        for (int i = 0; i < rects.Length; i++)
+        {
+            spriteRects.Add(new SpriteRect
+            {
+                name = tex.name + "_" + i,
+                rect = rects[i],
+                alignment = SpriteAlignment.Center,
+                pivot = new Vector2(0.5f, 0.5f),
+                spriteID = GUID.Generate()
+            });
+        }
+
+        dataProvider.SetSpriteRects(spriteRects.ToArray());
+        dataProvider.Apply();
+
+        // Dilimleme işlemini kaydet ve dosyayı yeniden import et
+        AssetDatabase.ImportAsset(path, ImportAssetOptions.ForceUpdate);
+
+        // 4. Şimdi bu yeni dilimleri PNG olarak dışarı çıkart (Yardımcı fonksiyonu kullanarak)
+        ExtractSpritesFromTexture(tex);
+    }
+
+    [MenuItem("Assets/Sprite İşlemleri/3- Otomatik Dilimle ve Ayır (Auto-Slice & Extract)", true)]
+    private static bool AutoSliceAndExtractValidation()
+    {
+        return Selection.activeObject is Texture2D;
+    }
+
+
+    // ===================================================================================
+    // YARDIMCI FONKSİYON: Dışarı Çıkartma Mantığı (1 ve 3 numaralı özellikler kullanıyor)
+    // ===================================================================================
+    private static void ExtractSpritesFromTexture(Texture2D selectedTexture)
+    {
         string path = AssetDatabase.GetAssetPath(selectedTexture);
         Object[] allAssets = AssetDatabase.LoadAllAssetsAtPath(path);
 
-        string folderPath = Path.GetDirectoryName(path) + "/" + selectedTexture.name + "_Ayrilmis";
+        string folderPath = Path.GetDirectoryName(path);
 
-        // Çıkartılacak resimler için yeni bir klasör oluştur
+        // Not: Eğer çıkan dosyalar çok fazla olup klasörü karıştırırsa diye, alt klasör oluşturmak istersen
+        // alttaki satırı aktif edip, üsttekini silebilirsin:
+        // string folderPath = Path.GetDirectoryName(path) + "/" + selectedTexture.name + "_Parcalar";
+
         if (!Directory.Exists(folderPath))
         {
             Directory.CreateDirectory(folderPath);
         }
 
         int count = 0;
+        List<string> generatedFilePaths = new List<string>();
 
         foreach (Object asset in allAssets)
         {
@@ -37,29 +159,37 @@ public class SpriteExtractorEditor
             {
                 Sprite sprite = (Sprite)asset;
 
-                // Orijinal texture'dan sadece bu sprite'ın olduğu alanı kes
                 Texture2D newTex = new Texture2D((int)sprite.rect.width, (int)sprite.rect.height);
                 Color[] pixels = sprite.texture.GetPixels((int)sprite.rect.x, (int)sprite.rect.y, (int)sprite.rect.width, (int)sprite.rect.height);
 
                 newTex.SetPixels(pixels);
                 newTex.Apply();
 
-                // PNG olarak kaydet
                 byte[] bytes = newTex.EncodeToPNG();
-                File.WriteAllBytes(folderPath + "/" + sprite.name + ".png", bytes);
+                string newFilePath = folderPath + "/" + sprite.name + ".png";
+                File.WriteAllBytes(newFilePath, bytes);
+
+                generatedFilePaths.Add(newFilePath);
                 count++;
             }
         }
 
-        // Projeyi yenile ki yeni dosyalar görünür olsun
         AssetDatabase.Refresh();
-        Debug.Log("İşlem Tamam! Toplam " + count + " adet alt sprite bağımsız dosya olarak çıkartıldı.");
-    }
 
-    // Bu seçeneğin sadece Texture2D dosyalarında görünmesini sağlayan kontrol
-    [MenuItem("Assets/Dilimlenmiş Spriteleri Çıkart (PNG)", true)]
-    private static bool ExtractSpritesValidation()
-    {
-        return Selection.activeObject is Texture2D;
+        foreach (string filePath in generatedFilePaths)
+        {
+            TextureImporter importer = AssetImporter.GetAtPath(filePath) as TextureImporter;
+            if (importer != null)
+            {
+                importer.textureType = TextureImporterType.Sprite;
+                importer.spriteImportMode = SpriteImportMode.Single;
+                importer.filterMode = FilterMode.Point;
+                importer.isReadable = true;
+
+                AssetDatabase.ImportAsset(filePath, ImportAssetOptions.ForceUpdate);
+            }
+        }
+
+        Debug.Log("İşlem Tamam! Toplam " + count + " adet alt sprite çıkartıldı ve ayarları (No Filter vb.) uygulandı.");
     }
 }
