@@ -14,13 +14,7 @@ has downscale
 
 
 <br>
-<img width="1345" height="822" alt="Ekran görüntüsü 2026-04-21 141831" src="https://github.com/user-attachments/assets/943196d1-eca0-4547-aeb1-10a38b3277e5" />
+<img width="679" height="474" alt="Ekran görüntüsü 2026-04-22 163525" src="https://github.com/user-attachments/assets/0711e9c0-7407-410f-8a7a-5036feae9d63" />
+<img width="712" height="511" alt="Ekran görüntüsü 2026-04-22 163634" src="https://github.com/user-attachments/assets/5687634b-555c-493d-b248-3e0540a3307a" />
 
-<br>
-
-<img width="755" height="469" alt="Ekran görüntüsü" src="https://github.com/user-attachments/assets/fa10999a-c0d4-4f65-af14-51d60117545a" />
-
-<br>
-<img width="995" height="687" alt="image" src="https://github.com/user-attachments/assets/24576c02-ff57-4737-be2e-e3f55c008e99" />
-<br>
 <img width="819" height="79" alt="image" src="https://github.com/user-attachments/assets/fd64260c-7673-4801-b1d3-dabf04e6fad0" />
