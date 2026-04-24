@@ -21,6 +21,15 @@ public class SimpleSpriteExtruder : MonoBehaviour
     public bool useGreedyMeshing = true;
     public float colorMatchTolerance = 4f;
 
+    [Header("Generated Depth Maps")]
+    public bool generateDepthMaps = true;
+    [Range(0f, 4f)] public float generatedNormalStrength = 1.5f;
+    [Range(0f, 1f)] public float generatedHeightAffect = 0.25f;
+    [Range(0.1f, 4f)] public float generatedHeightContrast = 1.2f;
+    [Range(-1f, 1f)] public float generatedHeightBias = 0f;
+    [Range(0, 3)] public int generatedHeightBlurRadius = 1;
+    public bool invertGeneratedNormalY = false;
+
     [Header("Save Settings")]
     public string categoryFolder = "testFolder";
     public string fileName = "item";
@@ -30,6 +39,8 @@ public class SimpleSpriteExtruder : MonoBehaviour
     private List<Color> colors = new List<Color>();
     private List<Vector2> uvs = new List<Vector2>();
     private Texture2D lastGeneratedTexture;
+    private Texture2D lastGeneratedNormalMap;
+    private Texture2D lastGeneratedHeightMap;
     private Material generatedPreviewMaterial;
 
     public void GeneratePreview()
@@ -46,6 +57,17 @@ public class SimpleSpriteExtruder : MonoBehaviour
 
         Texture2D workingTexture = ScaleTexture(sourceTexture, downscaleFactor);
         lastGeneratedTexture = workingTexture;
+
+        if (generateDepthMaps)
+        {
+            lastGeneratedHeightMap = GenerateHeightMap(workingTexture, generatedHeightContrast, generatedHeightBias, generatedHeightBlurRadius);
+            lastGeneratedNormalMap = GenerateNormalMapFromHeight(lastGeneratedHeightMap, generatedNormalStrength, invertGeneratedNormalY);
+        }
+        else
+        {
+            lastGeneratedHeightMap = null;
+            lastGeneratedNormalMap = null;
+        }
 
         if (useGreedyMeshing)
             GenerateGreedyMesh(workingTexture);
@@ -245,7 +267,7 @@ public class SimpleSpriteExtruder : MonoBehaviour
         ApplyVoxelMaterial(GetComponent<MeshRenderer>(), true);
     }
 
-    private void ConfigureVoxelMaterial(Material mat, Texture2D textureForMaterial)
+    private void ConfigureVoxelMaterial(Material mat, Texture2D textureForMaterial, Texture2D normalMapForMaterial, Texture2D heightMapForMaterial)
     {
         if (mat == null) return;
 
@@ -263,11 +285,43 @@ public class SimpleSpriteExtruder : MonoBehaviour
             mat.mainTextureOffset = Vector2.zero;
         }
 
+        if (normalMapForMaterial != null)
+        {
+            normalMapForMaterial.filterMode = FilterMode.Point;
+            normalMapForMaterial.wrapMode = TextureWrapMode.Clamp;
+            normalMapForMaterial.anisoLevel = 0;
+        }
+
+        if (heightMapForMaterial != null)
+        {
+            heightMapForMaterial.filterMode = FilterMode.Point;
+            heightMapForMaterial.wrapMode = TextureWrapMode.Clamp;
+            heightMapForMaterial.anisoLevel = 0;
+        }
+
+        if (mat.HasProperty("_NormalMap"))
+            mat.SetTexture("_NormalMap", normalMapForMaterial);
+
+        if (mat.HasProperty("_HeightMap"))
+            mat.SetTexture("_HeightMap", heightMapForMaterial);
+
         if (mat.HasProperty("_UseTexture"))
             mat.SetFloat("_UseTexture", textureForMaterial != null ? 1f : 0f);
 
         if (mat.HasProperty("_UseVertexColor"))
             mat.SetFloat("_UseVertexColor", 0f);
+
+        if (mat.HasProperty("_UseNormalMap"))
+            mat.SetFloat("_UseNormalMap", normalMapForMaterial != null ? 1f : 0f);
+
+        if (mat.HasProperty("_UseHeightMap"))
+            mat.SetFloat("_UseHeightMap", heightMapForMaterial != null ? 1f : 0f);
+
+        if (mat.HasProperty("_NormalStrength"))
+            mat.SetFloat("_NormalStrength", generatedNormalStrength);
+
+        if (mat.HasProperty("_HeightAffect"))
+            mat.SetFloat("_HeightAffect", generatedHeightAffect);
     }
 
     private void ApplyVoxelMaterial(MeshRenderer meshRenderer, bool createUniqueInstance)
@@ -292,7 +346,7 @@ public class SimpleSpriteExtruder : MonoBehaviour
         }
 
         Texture2D textureForMaterial = lastGeneratedTexture != null ? lastGeneratedTexture : sourceTexture;
-        ConfigureVoxelMaterial(targetMaterial, textureForMaterial);
+        ConfigureVoxelMaterial(targetMaterial, textureForMaterial, lastGeneratedNormalMap, lastGeneratedHeightMap);
         meshRenderer.sharedMaterial = targetMaterial;
     }
 
@@ -345,6 +399,110 @@ public class SimpleSpriteExtruder : MonoBehaviour
         return scaled;
     }
 
+    private Texture2D GenerateHeightMap(Texture2D source, float contrast, float bias, int blurRadius)
+    {
+        int w = source.width;
+        int h = source.height;
+        Texture2D heightMap = new Texture2D(w, h, TextureFormat.RGBA32, false);
+        heightMap.filterMode = FilterMode.Point;
+        heightMap.wrapMode = TextureWrapMode.Clamp;
+        heightMap.anisoLevel = 0;
+
+        float[] heights = new float[w * h];
+
+        for (int y = 0; y < h; y++)
+        {
+            for (int x = 0; x < w; x++)
+            {
+                Color c = source.GetPixel(x, y);
+                float v = c.grayscale * c.a;
+                v = (v - 0.5f) * contrast + 0.5f + bias;
+                v = Mathf.Clamp01(v);
+                heights[y * w + x] = v;
+            }
+        }
+
+        if (blurRadius > 0)
+        {
+            float[] temp = new float[w * h];
+            for (int pass = 0; pass < blurRadius; pass++)
+            {
+                for (int y = 0; y < h; y++)
+                {
+                    for (int x = 0; x < w; x++)
+                    {
+                        float sum = 0f;
+                        int count = 0;
+                        for (int oy = -1; oy <= 1; oy++)
+                        {
+                            int sy = Mathf.Clamp(y + oy, 0, h - 1);
+                            for (int ox = -1; ox <= 1; ox++)
+                            {
+                                int sx = Mathf.Clamp(x + ox, 0, w - 1);
+                                sum += heights[sy * w + sx];
+                                count++;
+                            }
+                        }
+
+                        temp[y * w + x] = sum / count;
+                    }
+                }
+
+                var swap = heights;
+                heights = temp;
+                temp = swap;
+            }
+        }
+
+        for (int y = 0; y < h; y++)
+        {
+            for (int x = 0; x < w; x++)
+            {
+                float hv = heights[y * w + x];
+                float a = source.GetPixel(x, y).a;
+                heightMap.SetPixel(x, y, new Color(hv, hv, hv, a));
+            }
+        }
+
+        heightMap.Apply(false, false);
+        return heightMap;
+    }
+
+    private Texture2D GenerateNormalMapFromHeight(Texture2D heightMap, float strength, bool invertY)
+    {
+        Texture2D normalMap = new Texture2D(heightMap.width, heightMap.height, TextureFormat.RGBA32, false);
+        normalMap.filterMode = FilterMode.Point;
+        normalMap.wrapMode = TextureWrapMode.Clamp;
+        normalMap.anisoLevel = 0;
+
+        int w = heightMap.width;
+        int h = heightMap.height;
+
+        for (int y = 0; y < h; y++)
+        {
+            for (int x = 0; x < w; x++)
+            {
+                float hL = heightMap.GetPixel(Mathf.Max(0, x - 1), y).r;
+                float hR = heightMap.GetPixel(Mathf.Min(w - 1, x + 1), y).r;
+                float hD = heightMap.GetPixel(x, Mathf.Max(0, y - 1)).r;
+                float hU = heightMap.GetPixel(x, Mathf.Min(h - 1, y + 1)).r;
+
+                float dx = (hL - hR) * strength;
+                float dy = (hD - hU) * strength;
+
+                if (invertY)
+                    dy = -dy;
+
+                Vector3 n = new Vector3(dx, dy, 1f).normalized;
+                Color enc = new Color(n.x * 0.5f + 0.5f, n.y * 0.5f + 0.5f, n.z * 0.5f + 0.5f, 1f);
+                normalMap.SetPixel(x, y, enc);
+            }
+        }
+
+        normalMap.Apply(false, false);
+        return normalMap;
+    }
+
     public void SaveAsPrefab()
     {
 #if UNITY_EDITOR
@@ -378,17 +536,23 @@ public class SimpleSpriteExtruder : MonoBehaviour
         string prefabPath = "Assets/Models/Prefabs/" + categoryFolder + "/" + uniqueFileName + ".prefab";
         string materialPath = "Assets/Models/Materials/" + categoryFolder + "/" + uniqueFileName + "_Mat.mat";
         string texturePath = "Assets/Models/Textures/" + categoryFolder + "/" + uniqueFileName + "_Tex.asset";
+        string normalPath = "Assets/Models/Textures/" + categoryFolder + "/" + uniqueFileName + "_Normal.asset";
+        string heightPath = "Assets/Models/Textures/" + categoryFolder + "/" + uniqueFileName + "_Height.asset";
 
         while (AssetDatabase.LoadAssetAtPath<Object>(prefabPath) != null ||
                AssetDatabase.LoadAssetAtPath<Object>(meshPath) != null ||
                AssetDatabase.LoadAssetAtPath<Object>(materialPath) != null ||
-               AssetDatabase.LoadAssetAtPath<Object>(texturePath) != null)
+               AssetDatabase.LoadAssetAtPath<Object>(texturePath) != null ||
+               AssetDatabase.LoadAssetAtPath<Object>(normalPath) != null ||
+               AssetDatabase.LoadAssetAtPath<Object>(heightPath) != null)
         {
             uniqueFileName = fileName + "_" + counter;
             meshPath = "Assets/Models/Meshes/" + categoryFolder + "/" + uniqueFileName + "_Mesh.asset";
             prefabPath = "Assets/Models/Prefabs/" + categoryFolder + "/" + uniqueFileName + ".prefab";
             materialPath = "Assets/Models/Materials/" + categoryFolder + "/" + uniqueFileName + "_Mat.mat";
             texturePath = "Assets/Models/Textures/" + categoryFolder + "/" + uniqueFileName + "_Tex.asset";
+            normalPath = "Assets/Models/Textures/" + categoryFolder + "/" + uniqueFileName + "_Normal.asset";
+            heightPath = "Assets/Models/Textures/" + categoryFolder + "/" + uniqueFileName + "_Height.asset";
             counter++;
         }
 
@@ -397,6 +561,8 @@ public class SimpleSpriteExtruder : MonoBehaviour
 
         Texture2D textureForMaterial = lastGeneratedTexture != null ? lastGeneratedTexture : sourceTexture;
         Texture2D textureAssetRef = textureForMaterial;
+        Texture2D normalAssetRef = lastGeneratedNormalMap;
+        Texture2D heightAssetRef = lastGeneratedHeightMap;
 
         if (textureForMaterial != null && textureForMaterial != sourceTexture)
         {
@@ -414,8 +580,28 @@ public class SimpleSpriteExtruder : MonoBehaviour
             }
         }
 
+        if (lastGeneratedNormalMap != null)
+        {
+            Texture2D normalToSave = Instantiate(lastGeneratedNormalMap);
+            normalToSave.filterMode = FilterMode.Point;
+            normalToSave.wrapMode = TextureWrapMode.Clamp;
+            normalToSave.anisoLevel = 0;
+            AssetDatabase.CreateAsset(normalToSave, normalPath);
+            normalAssetRef = AssetDatabase.LoadAssetAtPath<Texture2D>(normalPath);
+        }
+
+        if (lastGeneratedHeightMap != null)
+        {
+            Texture2D heightToSave = Instantiate(lastGeneratedHeightMap);
+            heightToSave.filterMode = FilterMode.Point;
+            heightToSave.wrapMode = TextureWrapMode.Clamp;
+            heightToSave.anisoLevel = 0;
+            AssetDatabase.CreateAsset(heightToSave, heightPath);
+            heightAssetRef = AssetDatabase.LoadAssetAtPath<Texture2D>(heightPath);
+        }
+
         Material materialToSave = new Material(voxelMaterial);
-        ConfigureVoxelMaterial(materialToSave, textureAssetRef);
+        ConfigureVoxelMaterial(materialToSave, textureAssetRef, normalAssetRef, heightAssetRef);
         AssetDatabase.CreateAsset(materialToSave, materialPath);
         AssetDatabase.SaveAssets();
 
