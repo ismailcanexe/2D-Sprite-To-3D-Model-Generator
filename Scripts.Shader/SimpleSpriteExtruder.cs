@@ -29,6 +29,8 @@ public class SimpleSpriteExtruder : MonoBehaviour
     [Range(-1f, 1f)] public float generatedHeightBias = 0f;
     [Range(0, 3)] public int generatedHeightBlurRadius = 1;
     public bool invertGeneratedNormalY = false;
+    public bool useGeneratedParallax = true;
+    [Range(0f, 0.1f)] public float generatedParallaxStrength = 0.02f;
 
     [Header("Save Settings")]
     public string categoryFolder = "testFolder";
@@ -322,6 +324,12 @@ public class SimpleSpriteExtruder : MonoBehaviour
 
         if (mat.HasProperty("_HeightAffect"))
             mat.SetFloat("_HeightAffect", generatedHeightAffect);
+
+        if (mat.HasProperty("_UseParallax"))
+            mat.SetFloat("_UseParallax", (heightMapForMaterial != null && useGeneratedParallax) ? 1f : 0f);
+
+        if (mat.HasProperty("_ParallaxStrength"))
+            mat.SetFloat("_ParallaxStrength", generatedParallaxStrength);
     }
 
     private void ApplyVoxelMaterial(MeshRenderer meshRenderer, bool createUniqueInstance)

@@ -16,7 +16,7 @@ public class SpriteExtractorEditor
         Object[] selectedObjects = Selection.GetFiltered(typeof(Texture2D), SelectionMode.Assets);
 
         if (selectedObjects.Length == 0) return;
-
+        
         int count = 0;
         foreach (Object obj in selectedObjects)
         {
